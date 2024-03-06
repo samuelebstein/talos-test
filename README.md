@@ -943,3 +943,132 @@ Okay now lets go back and create the policies
 aws --profile development iam attach-role-policy --role-name TalosLambdaExecutionRole --policy-arn "arn:aws:iam::339735964233:policy/LambdaExecutionPermissions"
 
 ```
+
+
+trying secrets retrieval in first deployment of code...
+```
+
+GOOS=linux GOARCH=amd64 go build -o main
+zip deployment.zip main
+
+
+```
+
+```
+  talos-applier-lambda-function git:(main) ✗ aws --profile development lambda create-function \                                                                                                                      
+    --function-name SamEbsteinTalosLambdaTest \                                    
+    --runtime provided.al2 \                                                                                                                                          
+    --role arn:aws:iam::339735964233:role/TalosLambdaExecutionRole \                                       
+    --handler main \                                                               
+    --zip-file fileb://deployment.zip \
+    --architecture x86_64 \
+    --timeout 15 \                                                                 
+    --memory-size 128                                                                                                                                                                      
+{                             
+    "FunctionName": "SamEbsteinTalosLambdaTest",                      
+    "FunctionArn": "arn:aws:lambda:us-east-1:339735964233:function:SamEbsteinTalosLambdaTest",                                                                                                                        
+    "Runtime": "provided.al2",
+    "Role": "arn:aws:iam::339735964233:role/TalosLambdaExecutionRole",             
+    "Handler": "main",       
+    "CodeSize": 7233800,                                                           
+    "Description": "",                                                             
+    "Timeout": 15,                                                                           
+    "MemorySize": 128,                                                             
+    "LastModified": "2024-03-06T19:12:16.950+0000",                                                        
+    "CodeSha256": "Z0SGkZomq2TGtQiLvJ3/DV/Lfyf9fgBUFaxB7YNgsPw=",                                          
+    "Version": "$LATEST",
+    "TracingConfig": {                                                                       
+        "Mode": "PassThrough"
+    },                                                                                       
+    "RevisionId": "29412239-452c-42f6-a114-e081320c3e53",                                                  
+    "State": "Pending",            
+    "StateReason": "The function is being created.",                                                       
+    "StateReasonCode": "Creating",
+    "PackageType": "Zip",                                                                                                                                             
+    "Architectures": [   
+        "x86_64"             
+    ],                                                                                                                                                                
+    "EphemeralStorage": {                                                          
+        "Size": 512       
+    },                             
+    "SnapStart": {                                                                 
+        "ApplyOn": "None",   
+        "OptimizationStatus": "Off"                                                                                                                                                        
+    },                                                                             
+    "RuntimeVersionConfig": {                 
+        "RuntimeVersionArn": "arn:aws:lambda:us-east-1::runtime:e44362e335db9c887e4819f03950e642c889a449eb010a6f1b4cb1a0d7e5c92b"                                                                                     
+    },                                                                                       
+    "LoggingConfig": {                        
+        "LogFormat": "Text",                  
+        "LogGroup": "/aws/lambda/SamEbsteinTalosLambdaTest"                                  
+    }                                                
+}  
+```
+
+function is created.. trying to create a test event with this input
+
+{
+  "name": "Test User"
+}
+
+received this error:
+
+```
+{
+  "errorType": "Runtime.InvalidEntrypoint",
+  "errorMessage": "RequestId: 407ca2c1-4e10-48f1-8594-1ba30a0aab85 Error: Couldn't find valid bootstrap(s): [/var/task/bootstrap /opt/bootstrap]"
+}
+```
+
+Think its because I used custom runtime on creation
+
+updating the function runtime:
+
+```
+➜  talos-applier-lambda-function git:(main) ✗ aws --profile development lambda update-function-configuration \
+    --function-name SamEbsteinTalosLambdaTest \
+    --runtime go1.x \
+    --handler main
+{
+    "FunctionName": "SamEbsteinTalosLambdaTest",
+    "FunctionArn": "arn:aws:lambda:us-east-1:339735964233:function:SamEbsteinTalosLambdaTest",
+    "Runtime": "go1.x",
+    "Role": "arn:aws:iam::339735964233:role/TalosLambdaExecutionRole",
+    "Handler": "main",
+    "CodeSize": 7233800,
+    "Description": "",
+    "Timeout": 15,
+    "MemorySize": 128,
+    "LastModified": "2024-03-06T19:19:00.000+0000",
+    "CodeSha256": "Z0SGkZomq2TGtQiLvJ3/DV/Lfyf9fgBUFaxB7YNgsPw=",
+    "Version": "$LATEST",
+    "TracingConfig": {
+        "Mode": "PassThrough"
+    },
+    "RevisionId": "c8ab45ae-f461-444f-bba0-fb29a1a1c370",
+    "State": "Active",
+    "LastUpdateStatus": "InProgress",
+    "LastUpdateStatusReason": "The function is being created.",
+    "LastUpdateStatusReasonCode": "Creating",
+    "PackageType": "Zip",
+    "Architectures": [
+        "x86_64"
+    ],
+    "EphemeralStorage": {
+        "Size": 512
+    },
+    "SnapStart": {
+        "ApplyOn": "None",
+        "OptimizationStatus": "Off"
+    },
+    "RuntimeVersionConfig": {
+        "RuntimeVersionArn": "arn:aws:lambda:us-east-1::runtime:30052276b0b7733e82eddf1f0942de1022c7dfbc0ca93cfc121c868194868dec"
+    },
+    "LoggingConfig": {
+        "LogFormat": "Text",
+        "LogGroup": "/aws/lambda/SamEbsteinTalosLambdaTest"
+    }
+}
+```
+
+Function succeeds now.
