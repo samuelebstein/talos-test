@@ -1,0 +1,22 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": "secretsmanager:GetSecretValue",
+        "Resource": [
+          "arn:aws:secretsmanager:us-east-1:339735964233:secret:sam-ebstein-test-talosconfig-CnZCDQ",
+          "arn:aws:secretsmanager:us-east-1:339735964233:secret:sam-ebstein-test-talos-worker-yaml-cyRmM4"
+        ]
+      },
+      {
+        "Effect": "Allow",
+        "Action": [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ],
+        "Resource": "arn:aws:logs:us-east-1:339735964233:*"
+      }
+    ]
+}

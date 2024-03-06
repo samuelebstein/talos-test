@@ -770,3 +770,176 @@ waiting for coredns to report ready: OK
 waiting for all k8s nodes to report schedulable: ...
 waiting for all k8s nodes to report schedulable: OK
 ```
+
+Using the kubeconfig that was created...
+
+```
+➜  talos-test git:(main) ✗ kubectl --kubeconfig=kubeconfig get nodes -o wide
+NAME              STATUS   ROLES           AGE     VERSION   INTERNAL-IP    EXTERNAL-IP   OS-IMAGE         KERNEL-VERSION   CONTAINER-RUNTIME
+ip-10-200-1-217   Ready    control-plane   5m30s   v1.29.2   10.200.1.217   <none>        Talos (v1.6.4)   6.1.74-talos     containerd://1.7.13
+ip-10-200-1-28    Ready    control-plane   5m31s   v1.29.2   10.200.1.28    <none>        Talos (v1.6.4)   6.1.74-talos     containerd://1.7.13
+ip-10-200-1-90    Ready    control-plane   5m30s   v1.29.2   10.200.1.90    <none>        Talos (v1.6.4)   6.1.74-talos     containerd://1.7.13
+```
+
+```
+➜  talos-test git:(main) ✗ talosctl --talosconfig talosconfig service       
+NODE            SERVICE      STATE     HEALTH   LAST CHANGE   LAST EVENT
+3.234.177.183   apid         Running   OK       31m13s ago    Health check successful
+3.234.177.183   containerd   Running   OK       31m20s ago    Health check successful
+3.234.177.183   cri          Running   OK       31m15s ago    Health check successful
+3.234.177.183   dashboard    Running   ?        31m19s ago    Process Process(["/sbin/dashboard"]) started with PID 1305
+3.234.177.183   etcd         Running   OK       13m24s ago    Health check successful
+3.234.177.183   kubelet      Running   OK       31m3s ago     Health check successful
+3.234.177.183   machined     Running   OK       31m26s ago    Health check successful
+3.234.177.183   trustd       Running   OK       31m15s ago    Health check successful
+3.234.177.183   udevd        Running   OK       31m24s ago    Health check successful
+```
+
+Now lets try to bring up some worker nodes..
+
+Create the asg, launch config, try to bring up a worker without user data. it should succeed and then we can terminate it.
+
+```
+aws --profile development autoscaling create-launch-configuration \
+    --launch-configuration-name talos-aws-tutorial-worker-launch-config \
+    --image-id $AMI \
+    --instance-type t3.small \
+    --security-groups $SECURITY_GROUP # Using same security group as the control plane nodes. no user data
+    # --iam-instance-profile your-iam-role # Maybe add this later 
+```
+```
+aws --profile development ec2 create-launch-template \
+    --launch-template-name "talos-aws-tutorial-worker-launch-config" \
+    --version-description "version1" \
+    --launch-template-data "{\"ImageId\":\"$AMI\",\"InstanceType\":\"t3.small\",\"SecurityGroupIds\":[\"$SECURITY_GROUP\"],\"TagSpecifications\":[{\"ResourceType\":\"instance\",\"Tags\":[{\"Key\":\"Purpose\",\"Value\":\"talos-aws-tutorial-worker\"}]}]}"    
+
+```        
+
+```
+➜  talos-test git:(main) ✗ aws --profile development ec2 create-launch-template \
+    --launch-template-name "talos-aws-tutorial-worker-launch-config" \
+    --version-description "version1" \
+    --launch-template-data "{\"ImageId\":\"$AMI\",\"InstanceType\":\"t3.small\",\"SecurityGroupIds\":[\"$SECURITY_GROUP\"],\"TagSpecifications\":[{\"ResourceType\":\"instance\",\"Tags\":[{\"Key\":\"Purpose\",\"Value\":\"talos-aws-tutorial-worker\"}]}]}"    
+{
+    "LaunchTemplate": {
+        "LaunchTemplateId": "lt-07671e4a96fe36737",
+        "LaunchTemplateName": "talos-aws-tutorial-worker-launch-config",
+        "CreateTime": "2024-03-06T00:25:45+00:00",
+        "CreatedBy": "arn:aws:sts::339735964233:assumed-role/admin/sam_ebstein",
+        "DefaultVersionNumber": 1,
+        "LatestVersionNumber": 1
+    }
+}
+```
+
+```
+aws --profile development autoscaling create-auto-scaling-group \
+    --auto-scaling-group-name talos-workers-asg \
+    --launch-configuration-name talos-aws-tutorial-worker-launch-config \
+    --min-size 0 \
+    --max-size 3 \
+    --desired-capacity 1 \
+    --vpc-zone-identifier $SUBNET \
+    --tags "Key=Name,Value=talos-worker,PropagateAtLaunch=true"
+```    
+
+that successfully created an autoscaling group...
+
+
+Now on to trying to create a lambda function...
+
+```
+go mod init github.com/samuelebstein/talos-test/talos-applier-lambda-function
+
+go get github.com/aws/aws-lambda-go/lambda
+
+GOOS=linux GOARCH=amd64 go build -o main
+
+zip function.zip main
+
+```
+
+
+```
+aws --profile development iam create-role --role-name TalosLambdaExecutionRole --assume-role-policy-document file://trust-policy.json
+
+➜  talos-applier-lambda-function git:(main) ✗ aws --profile development iam create-role --role-name TalosLambdaExecutionRole --assume-role-policy-document file://trust-policy.json
+{
+    "Role": {
+        "Path": "/",
+        "RoleName": "TalosLambdaExecutionRole",
+        "RoleId": "AROAU6GOXNJETQEUZCNPZ",
+        "Arn": "arn:aws:iam::339735964233:role/TalosLambdaExecutionRole",
+        "CreateDate": "2024-03-06T18:28:59+00:00",
+        "AssumeRolePolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {
+                        "Service": "lambda.amazonaws.com"
+                    },
+                    "Action": "sts:AssumeRole"
+                }
+            ]
+        }
+    }
+}
+
+```
+
+Lets create the test secret in secrets manager before creating the policies that we'll attaach to the lambda execution role...
+
+
+```
+➜  talos-test git:(main) ✗ aws --profile development secretsmanager create-secret --name "sam-ebstein-test-talosconfig" \
+    --description "Talos configuration for sam-ebstein-test" \
+    --secret-string file://talosconfig
+{
+    "ARN": "arn:aws:secretsmanager:us-east-1:339735964233:secret:sam-ebstein-test-talosconfig-CnZCDQ",
+    "Name": "sam-ebstein-test-talosconfig",
+    "VersionId": "1b5ce0ea-6ebb-4d9d-92a0-c2aa7da4cf19"
+}
+```
+
+Is the talosconfig something that changes over time?? Because if so, then the secret data would have to updated every time the endpoing (for example) changes..for instance if the ec2 instance falls down
+
+
+lets create the worker secret also
+
+```
+➜  talos-test git:(main) ✗ aws --profile development secretsmanager create-secret --name "sam-ebstein-test-talos-worker-yaml" \
+    --description "Talos worker yaml configuration for sam-ebstein-test" \
+    --secret-string file://worker.yaml
+{
+    "ARN": "arn:aws:secretsmanager:us-east-1:339735964233:secret:sam-ebstein-test-talos-worker-yaml-cyRmM4",
+    "Name": "sam-ebstein-test-talos-worker-yaml",
+    "VersionId": "afd500ae-15cf-480a-b568-3b1bb76b8071"
+}
+```
+
+Okay now lets go back and create the policies
+
+```
+➜  talos-applier-lambda-function git:(main) ✗ aws --profile development iam create-policy --policy-name LambdaExecutionPermissions --policy-document file://permissions-policy.json
+{
+    "Policy": {
+        "PolicyName": "LambdaExecutionPermissions",
+        "PolicyId": "ANPAU6GOXNJE3BOEPONB4",
+        "Arn": "arn:aws:iam::339735964233:policy/LambdaExecutionPermissions",
+        "Path": "/",
+        "DefaultVersionId": "v1",
+        "AttachmentCount": 0,
+        "PermissionsBoundaryUsageCount": 0,
+        "IsAttachable": true,
+        "CreateDate": "2024-03-06T18:51:55+00:00",
+        "UpdateDate": "2024-03-06T18:51:55+00:00"
+    }
+}
+```
+
+
+```
+aws --profile development iam attach-role-policy --role-name TalosLambdaExecutionRole --policy-arn "arn:aws:iam::339735964233:policy/LambdaExecutionPermissions"
+
+```
