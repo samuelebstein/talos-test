@@ -1072,3 +1072,26 @@ updating the function runtime:
 ```
 
 Function succeeds now.
+
+```
+➜  talos-applier-lambda-function git:(main) ✗ aws --profile development events put-rule \
+    --name "TalosWorkersAsgScaleUp" \
+    --event-pattern file://event-pattern.json \
+    --state ENABLED
+{
+    "RuleArn": "arn:aws:events:us-east-1:339735964233:rule/TalosWorkersAsgScaleUp"
+}
+```
+
+
+```
+➜  talos-applier-lambda-function git:(main) ✗ aws --profile development events put-targets \
+    --rule "TalosWorkersAsgScaleUp" \
+    --targets "Id"="1","Arn"="arn:aws:lambda:us-east-1:339735964233:function:SamEbsteinTalosLambdaTest"
+{
+    "FailedEntryCount": 0,
+    "FailedEntries": []
+}
+```    
+
+
