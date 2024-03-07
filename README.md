@@ -1380,3 +1380,572 @@ creating new launch template version due to security group issues
 okay I've created a new launch template and main.go can find the public ip address.. finally..!
 
 next step is to update the function to get the secret and try to apply the config using the talos go client...!
+
+update function:
+```
+aws --profile development lambda update-function-code --function-name SamEbsteinTalosLambdaTest --zip-file fileb://deployment.zip
+```
+
+Recieved this error:
+
+Mode details (should contain info about response):  Applied configuration with a reboot: this config change can't be applied in immediate mode
+
+also mode details logs too much information...
+
+Lets retry creating the cluster...
+
+delete load balancer (arn)
+delete target group (arn)
+delete instances (cp ip addresses)
+delete listener
+
+➜  talos-test git:(main) ✗ aws --profile development elbv2 create-load-balancer \
+    --region $REGION \
+    --name talos-aws-tutorial-lb \
+    --type network --subnets $SUBNET
+{
+    "LoadBalancers": [
+        {
+            "LoadBalancerArn": "arn:aws:elasticloadbalancing:us-east-1:339735964233:loadbalancer/net/talos-aws-tutorial-lb/c0674df5bf28aa94",
+            "DNSName": "talos-aws-tutorial-lb-c0674df5bf28aa94.elb.us-east-1.amazonaws.com",
+            "CanonicalHostedZoneId": "Z26RNL4JYFTOTI",
+            "CreatedTime": "2024-03-07T19:18:28.058000+00:00",
+            "LoadBalancerName": "talos-aws-tutorial-lb",
+            "Scheme": "internet-facing",
+            "VpcId": "vpc-0d2df8f32c707fd36",
+            "State": {
+                "Code": "provisioning"
+            },
+            "Type": "network",
+            "AvailabilityZones": [
+                {
+                    "ZoneName": "us-east-1a",
+                    "SubnetId": "subnet-0bdf61de47f04f337",
+                    "LoadBalancerAddresses": []
+                }
+            ],
+            "IpAddressType": "ipv4"
+        }
+    ]
+}
+
+➜  talos-test git:(main) ✗ aws --profile development elbv2 create-target-group --region $REGION \ 
+    --name talos-aws-tutorial-tg \
+    --protocol TCP \
+    --port 6443 \
+    --target-type ip \
+    --vpc-id $VPC 
+{
+    "TargetGroups": [
+        {
+            "TargetGroupArn": "arn:aws:elasticloadbalancing:us-east-1:339735964233:targetgroup/talos-aws-tutorial-tg/d7d7505606efd8d1",
+            "TargetGroupName": "talos-aws-tutorial-tg",
+            "Protocol": "TCP",
+            "Port": 6443,
+            "VpcId": "vpc-0d2df8f32c707fd36",
+            "HealthCheckProtocol": "TCP",
+            "HealthCheckPort": "traffic-port",
+            "HealthCheckEnabled": true,
+            "HealthCheckIntervalSeconds": 30,
+            "HealthCheckTimeoutSeconds": 10,
+            "HealthyThresholdCount": 5,
+            "UnhealthyThresholdCount": 2,
+            "TargetType": "ip",
+            "IpAddressType": "ipv4"
+        }
+    ]
+}
+
+```
+talosctl gen config talos-k8s-aws-tutorial https://talos-aws-tutorial-lb-c0674df5bf28aa94.elb.us-east-1.amazonaws.com:443 --with-examples=false --with-docs=false
+```
+
+```
+while [[ "$CP_COUNT" -lt 4 ]]; do
+  aws --profile development ec2 run-instances \
+    --region $REGION \
+    --image-id $AMI \
+    --count 1 \
+    --instance-type t3.small \
+    --user-data file://controlplane.yaml \
+    --subnet-id $SUBNET \
+    --security-group-ids $SECURITY_GROUP \
+    --associate-public-ip-address \
+    --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=talos-aws-tutorial-cp-$CP_COUNT}]"
+  ((CP_COUNT++))
+done
+{
+    "Groups": [],
+    "Instances": [
+        {
+            "AmiLaunchIndex": 0,
+            "ImageId": "ami-09360283b6eec5d54",
+            "InstanceId": "i-07d5db6f33dfca74a",
+            "InstanceType": "t3.small",
+            "LaunchTime": "2024-03-07T19:25:23+00:00",
+            "Monitoring": {
+                "State": "disabled"
+            },
+            "Placement": {
+                "AvailabilityZone": "us-east-1a",
+                "GroupName": "",
+                "Tenancy": "default"
+            },
+            "PrivateDnsName": "ip-10-200-1-211.ec2.internal",
+            "PrivateIpAddress": "10.200.1.211",
+            "ProductCodes": [],
+            "PublicDnsName": "",
+            "State": {
+                "Code": 0,
+                "Name": "pending"
+            },
+            "StateTransitionReason": "",
+            "SubnetId": "subnet-0bdf61de47f04f337",
+            "VpcId": "vpc-0d2df8f32c707fd36",
+            "Architecture": "x86_64",
+            "BlockDeviceMappings": [],
+            "ClientToken": "dcf8a489-b30b-4123-93e4-096c33019a08",
+            "EbsOptimized": false,
+            "EnaSupport": true,
+            "Hypervisor": "xen",
+            "NetworkInterfaces": [
+                {
+                    "Attachment": {
+                        "AttachTime": "2024-03-07T19:25:23+00:00",
+                        "AttachmentId": "eni-attach-0343444f77318012b",
+                        "DeleteOnTermination": true,
+                        "DeviceIndex": 0,
+                        "Status": "attaching",
+                        "NetworkCardIndex": 0
+                    },
+                    "Description": "",
+                    "Groups": [
+                        {
+                            "GroupName": "talos-aws-tutorial-sg",
+                            "GroupId": "sg-01e3966613a73846c"
+                        }
+                    ],
+                    "Ipv6Addresses": [],
+                    "MacAddress": "02:b8:4e:ce:f4:67",
+                    "NetworkInterfaceId": "eni-0411b8d486deeb786",
+                    "OwnerId": "339735964233",
+                    "PrivateDnsName": "ip-10-200-1-211.ec2.internal",
+                    "PrivateIpAddress": "10.200.1.211",
+                    "PrivateIpAddresses": [
+                        {
+                            "Primary": true,
+                            "PrivateDnsName": "ip-10-200-1-211.ec2.internal",
+                            "PrivateIpAddress": "10.200.1.211"
+                        }
+                    ],
+                    "SourceDestCheck": true,
+                    "Status": "in-use",
+                    "SubnetId": "subnet-0bdf61de47f04f337",
+                    "VpcId": "vpc-0d2df8f32c707fd36",
+                    "InterfaceType": "interface"
+                }
+            ],
+            "RootDeviceName": "/dev/xvda",
+            "RootDeviceType": "ebs",
+            "SecurityGroups": [
+                {
+                    "GroupName": "talos-aws-tutorial-sg",
+                    "GroupId": "sg-01e3966613a73846c"
+                }
+            ],
+            "SourceDestCheck": true,
+            "StateReason": {
+                "Code": "pending",
+                "Message": "pending"
+            },
+            "Tags": [
+                {
+                    "Key": "Name",
+                    "Value": "talos-aws-tutorial-cp-1"
+                }
+            ],
+            "VirtualizationType": "hvm",
+            "CpuOptions": {
+                "CoreCount": 1,
+                "ThreadsPerCore": 2
+            },
+            "CapacityReservationSpecification": {
+                "CapacityReservationPreference": "open"
+            },
+            "MetadataOptions": {
+                "State": "pending",
+                "HttpTokens": "required",
+                "HttpPutResponseHopLimit": 2,
+                "HttpEndpoint": "enabled",
+                "HttpProtocolIpv6": "disabled",
+                "InstanceMetadataTags": "disabled"
+            },
+            "EnclaveOptions": {
+                "Enabled": false
+            },
+            "PrivateDnsNameOptions": {
+                "HostnameType": "ip-name",
+                "EnableResourceNameDnsARecord": false,
+                "EnableResourceNameDnsAAAARecord": false
+            },
+            "MaintenanceOptions": {
+                "AutoRecovery": "default"
+            },
+            "CurrentInstanceBootMode": "legacy-bios"
+        }
+    ],
+    "OwnerId": "339735964233",
+    "ReservationId": "r-041efaf73512c935f"
+}
+{
+    "Groups": [],
+    "Instances": [
+        {
+            "AmiLaunchIndex": 0,
+            "ImageId": "ami-09360283b6eec5d54",
+            "InstanceId": "i-0c4ae87b50f877a6b",
+            "InstanceType": "t3.small",
+            "LaunchTime": "2024-03-07T19:25:25+00:00",
+            "Monitoring": {
+                "State": "disabled"
+            },
+            "Placement": {
+                "AvailabilityZone": "us-east-1a",
+                "GroupName": "",
+                "Tenancy": "default"
+            },
+            "PrivateDnsName": "ip-10-200-1-22.ec2.internal",
+            "PrivateIpAddress": "10.200.1.22",
+            "ProductCodes": [],
+            "PublicDnsName": "",
+            "State": {
+                "Code": 0,
+                "Name": "pending"
+            },
+            "StateTransitionReason": "",
+            "SubnetId": "subnet-0bdf61de47f04f337",
+            "VpcId": "vpc-0d2df8f32c707fd36",
+            "Architecture": "x86_64",
+            "BlockDeviceMappings": [],
+            "ClientToken": "d8b5e9af-1925-4b48-9631-8e82461edea6",
+            "EbsOptimized": false,
+            "EnaSupport": true,
+            "Hypervisor": "xen",
+            "NetworkInterfaces": [
+                {
+                    "Attachment": {
+                        "AttachTime": "2024-03-07T19:25:25+00:00",
+                        "AttachmentId": "eni-attach-0bcdaf49f1cc190a7",
+                        "DeleteOnTermination": true,
+                        "DeviceIndex": 0,
+                        "Status": "attaching",
+                        "NetworkCardIndex": 0
+                    },
+                    "Description": "",
+                    "Groups": [
+                        {
+                            "GroupName": "talos-aws-tutorial-sg",
+                            "GroupId": "sg-01e3966613a73846c"
+                        }
+                    ],
+                    "Ipv6Addresses": [],
+                    "MacAddress": "02:6e:fc:94:19:cb",
+                    "NetworkInterfaceId": "eni-05e5435e0acc39e0c",
+                    "OwnerId": "339735964233",
+                    "PrivateDnsName": "ip-10-200-1-22.ec2.internal",
+                    "PrivateIpAddress": "10.200.1.22",
+                    "PrivateIpAddresses": [
+                        {
+                            "Primary": true,
+                            "PrivateDnsName": "ip-10-200-1-22.ec2.internal",
+                            "PrivateIpAddress": "10.200.1.22"
+                        }
+                    ],
+                    "SourceDestCheck": true,
+                    "Status": "in-use",
+                    "SubnetId": "subnet-0bdf61de47f04f337",
+                    "VpcId": "vpc-0d2df8f32c707fd36",
+                    "InterfaceType": "interface"
+                }
+            ],
+            "RootDeviceName": "/dev/xvda",
+            "RootDeviceType": "ebs",
+            "SecurityGroups": [
+                {
+                    "GroupName": "talos-aws-tutorial-sg",
+                    "GroupId": "sg-01e3966613a73846c"
+                }
+            ],
+            "SourceDestCheck": true,
+            "StateReason": {
+                "Code": "pending",
+                "Message": "pending"
+            },
+            "Tags": [
+                {
+                    "Key": "Name",
+                    "Value": "talos-aws-tutorial-cp-2"
+                }
+            ],
+            "VirtualizationType": "hvm",
+            "CpuOptions": {
+                "CoreCount": 1,
+                "ThreadsPerCore": 2
+            },
+            "CapacityReservationSpecification": {
+                "CapacityReservationPreference": "open"
+            },
+            "MetadataOptions": {
+                "State": "pending",
+                "HttpTokens": "required",
+                "HttpPutResponseHopLimit": 2,
+                "HttpEndpoint": "enabled",
+                "HttpProtocolIpv6": "disabled",
+                "InstanceMetadataTags": "disabled"
+            },
+            "EnclaveOptions": {
+                "Enabled": false
+            },
+            "PrivateDnsNameOptions": {
+                "HostnameType": "ip-name",
+                "EnableResourceNameDnsARecord": false,
+                "EnableResourceNameDnsAAAARecord": false
+            },
+            "MaintenanceOptions": {
+                "AutoRecovery": "default"
+            },
+            "CurrentInstanceBootMode": "legacy-bios"
+        }
+    ],
+    "OwnerId": "339735964233",
+    "ReservationId": "r-04072be168f784592"
+}
+{
+    "Groups": [],
+    "Instances": [
+        {
+            "AmiLaunchIndex": 0,
+            "ImageId": "ami-09360283b6eec5d54",
+            "InstanceId": "i-0f3ea6ba56f6d043c",
+            "InstanceType": "t3.small",
+            "LaunchTime": "2024-03-07T19:25:27+00:00",
+            "Monitoring": {
+                "State": "disabled"
+            },
+            "Placement": {
+                "AvailabilityZone": "us-east-1a",
+                "GroupName": "",
+                "Tenancy": "default"
+            },
+            "PrivateDnsName": "ip-10-200-1-252.ec2.internal",
+            "PrivateIpAddress": "10.200.1.252",
+            "ProductCodes": [],
+            "PublicDnsName": "",
+            "State": {
+                "Code": 0,
+                "Name": "pending"
+            },
+            "StateTransitionReason": "",
+            "SubnetId": "subnet-0bdf61de47f04f337",
+            "VpcId": "vpc-0d2df8f32c707fd36",
+            "Architecture": "x86_64",
+            "BlockDeviceMappings": [],
+            "ClientToken": "1b566092-1593-4ac3-b9c4-287d1390cf9d",
+            "EbsOptimized": false,
+            "EnaSupport": true,
+            "Hypervisor": "xen",
+            "NetworkInterfaces": [
+                {
+                    "Attachment": {
+                        "AttachTime": "2024-03-07T19:25:27+00:00",
+                        "AttachmentId": "eni-attach-06634faa6fdf32ba0",
+                        "DeleteOnTermination": true,
+                        "DeviceIndex": 0,
+                        "Status": "attaching",
+                        "NetworkCardIndex": 0
+                    },
+                    "Description": "",
+                    "Groups": [
+                        {
+                            "GroupName": "talos-aws-tutorial-sg",
+                            "GroupId": "sg-01e3966613a73846c"
+                        }
+                    ],
+                    "Ipv6Addresses": [],
+                    "MacAddress": "02:d3:84:0c:33:ed",
+                    "NetworkInterfaceId": "eni-069d9f383e9ba2285",
+                    "OwnerId": "339735964233",
+                    "PrivateDnsName": "ip-10-200-1-252.ec2.internal",
+                    "PrivateIpAddress": "10.200.1.252",
+                    "PrivateIpAddresses": [
+                        {
+                            "Primary": true,
+                            "PrivateDnsName": "ip-10-200-1-252.ec2.internal",
+                            "PrivateIpAddress": "10.200.1.252"
+                        }
+                    ],
+                    "SourceDestCheck": true,
+                    "Status": "in-use",
+                    "SubnetId": "subnet-0bdf61de47f04f337",
+                    "VpcId": "vpc-0d2df8f32c707fd36",
+                    "InterfaceType": "interface"
+                }
+            ],
+            "RootDeviceName": "/dev/xvda",
+            "RootDeviceType": "ebs",
+            "SecurityGroups": [
+                {
+                    "GroupName": "talos-aws-tutorial-sg",
+                    "GroupId": "sg-01e3966613a73846c"
+                }
+            ],
+            "SourceDestCheck": true,
+            "StateReason": {
+                "Code": "pending",
+                "Message": "pending"
+            },
+            "Tags": [
+                {
+                    "Key": "Name",
+                    "Value": "talos-aws-tutorial-cp-3"
+                }
+            ],
+            "VirtualizationType": "hvm",
+            "CpuOptions": {
+                "CoreCount": 1,
+                "ThreadsPerCore": 2
+            },
+            "CapacityReservationSpecification": {
+                "CapacityReservationPreference": "open"
+            },
+            "MetadataOptions": {
+                "State": "pending",
+                "HttpTokens": "required",
+                "HttpPutResponseHopLimit": 2,
+                "HttpEndpoint": "enabled",
+                "HttpProtocolIpv6": "disabled",
+                "InstanceMetadataTags": "disabled"
+            },
+            "EnclaveOptions": {
+                "Enabled": false
+            },
+            "PrivateDnsNameOptions": {
+                "HostnameType": "ip-name",
+                "EnableResourceNameDnsARecord": false,
+                "EnableResourceNameDnsAAAARecord": false
+            },
+            "MaintenanceOptions": {
+                "AutoRecovery": "default"
+            },
+            "CurrentInstanceBootMode": "legacy-bios"
+        }
+    ],
+    "OwnerId": "339735964233",
+    "ReservationId": "r-0dd070a903aa451bc"
+}
+```
+
+
+
+```
+
+CP_NODE_1_IP=10.200.1.252
+CP_NODE_2_IP=10.200.1.22
+CP_NODE_3_IP=10.200.1.211
+
+aws --profile development elbv2 register-targets \
+    --region $REGION \
+    --target-group-arn $TARGET_GROUP_ARN \
+    --targets Id=$CP_NODE_1_IP  Id=$CP_NODE_2_IP  Id=$CP_NODE_3_IP
+```
+```
+➜  talos-applier-lambda-function git:(main) ✗ aws --profile development elbv2 create-listener \
+    --region $REGION \
+    --load-balancer-arn $LOAD_BALANCER_ARN \
+    --protocol TCP \
+    --port 443 \
+    --default-actions Type=forward,TargetGroupArn=$TARGET_GROUP_ARN
+{
+    "Listeners": [
+        {
+            "ListenerArn": "arn:aws:elasticloadbalancing:us-east-1:339735964233:listener/net/talos-aws-tutorial-lb/c0674df5bf28aa94/a75a92a21a9cc10e",
+            "LoadBalancerArn": "arn:aws:elasticloadbalancing:us-east-1:339735964233:loadbalancer/net/talos-aws-tutorial-lb/c0674df5bf28aa94",
+            "Port": 443,
+            "Protocol": "TCP",
+            "DefaultActions": [
+                {
+                    "Type": "forward",
+                    "TargetGroupArn": "arn:aws:elasticloadbalancing:us-east-1:339735964233:targetgroup/talos-aws-tutorial-tg/d7d7505606efd8d1",
+                    "ForwardConfig": {
+                        "TargetGroups": [
+                            {
+                                "TargetGroupArn": "arn:aws:elasticloadbalancing:us-east-1:339735964233:targetgroup/talos-aws-tutorial-tg/d7d7505606efd8d1"
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    ]
+}
+```
+
+```
+➜  talos-applier-lambda-function git:(main) ✗ talosctl --talosconfig talosconfig config endpoint 3.239.168.158
+➜  talos-applier-lambda-function git:(main) ✗ talosctl --talosconfig talosconfig config node 3.239.168.158
+➜  talos-applier-lambda-function git:(main) ✗ talosctl --talosconfig talosconfig bootstrap
+
+➜  talos-applier-lambda-function git:(main) ✗ 
+```
+
+Its up now:
+
+➜  talos-applier-lambda-function git:(main) ✗ talosctl --talosconfig talosconfig  health
+
+discovered nodes: ["10.200.1.211" "10.200.1.22" "10.200.1.252"]
+waiting for etcd to be healthy: ...
+waiting for etcd to be healthy: OK
+waiting for etcd members to be consistent across nodes: ...
+waiting for etcd members to be consistent across nodes: OK
+waiting for etcd members to be control plane nodes: ...
+waiting for etcd members to be control plane nodes: OK
+waiting for apid to be ready: ...
+waiting for apid to be ready: OK
+waiting for all nodes memory sizes: ...
+waiting for all nodes memory sizes: OK
+waiting for all nodes disk sizes: ...
+waiting for all nodes disk sizes: OK
+waiting for kubelet to be healthy: ...
+waiting for kubelet to be healthy: OK
+waiting for all nodes to finish boot sequence: ...
+waiting for all nodes to finish boot sequence: OK
+waiting for all k8s nodes to report: ...
+waiting for all k8s nodes to report: can't find expected node with IPs ["10.200.1.211"]
+waiting for all k8s nodes to report: OK
+waiting for all k8s nodes to report ready: ...
+waiting for all k8s nodes to report ready: OK
+waiting for all control plane static pods to be running: ...
+waiting for all control plane static pods to be running: OK
+waiting for all control plane components to be ready: ...
+waiting for all control plane components to be ready: can't find expected node with IPs ["10.200.1.211"]
+waiting for all control plane components to be ready: expected number of pods for kube-controller-manager to be 3, got 2
+waiting for all control plane components to be ready: OK
+waiting for kube-proxy to report ready: ...
+waiting for kube-proxy to report ready: OK
+waiting for coredns to report ready: ...
+waiting for coredns to report ready: OK
+waiting for all k8s nodes to report schedulable: ...
+waiting for all k8s nodes to report schedulable: OK
+
+
+```
+aws --profile development secretsmanager put-secret-value \
+    --secret-id "sam-ebstein-test-talosconfig" \
+    --secret-string file://talosconfig
+
+
+aws --profile development secretsmanager put-secret-value \
+    --secret-id "sam-ebstein-test-talos-worker-yaml" \
+    --secret-string file://worker.yaml    
+```
+
