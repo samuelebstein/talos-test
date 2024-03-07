@@ -119,11 +119,19 @@ func HandleRequest(ctx context.Context, event json.RawMessage) (MyResponse, erro
 		return MyResponse{}, fmt.Errorf("failed to retrieve secret %s: %v", workerConfigSecretName, err)
 	}
 
-	// Establish the talos client
+	// Establish the talos client configuration
 	talosClientConfig, err := clientconfig.FromString(talosConfigSecretString)
 	if err != nil {
 		return MyResponse{}, fmt.Errorf("failed to create client config", err)
 	}
+
+	// Target the specified node in the context. Hacky way to do this. Create function later
+	contextName := "talos-k8s-aws-tutorial"
+	configContext, exists := talosClientConfig.Contexts[contextName]
+	if !exists {
+		return MyResponse{}, fmt.Errorf("context %s does not exist", contextName)
+	}
+	configContext.Nodes = []string{publicIP}
 
 	talosClient, err := client.New(ctx, client.WithConfig(talosClientConfig))
 	if err != nil {

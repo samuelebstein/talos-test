@@ -1949,3 +1949,9 @@ aws --profile development secretsmanager put-secret-value \
     --secret-string file://worker.yaml    
 ```
 
+
+
+OHHHHHH THE TALOS CONFIG HAS THE ENDPOINT AND NODES IN IT so I basically brought down the cluster by applying the worker config to one of the control plane nodes...
+
+update the talosconfig so that node is not declared...?
+took out the node value of the talosconfig. need to reupdate the secret
