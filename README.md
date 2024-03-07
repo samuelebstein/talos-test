@@ -1115,3 +1115,266 @@ Add resource based policy to allow lambda to be invoked:
 should be able to bring in this client in the code:
 
 https://github.com/siderolabs/talos/blob/8c79539914324eee64dbdaf1f535fc4e20da55e8/pkg/machinery/client/client.go#L243
+
+
+updating the policy to include ec2 describe instances
+
+```
+➜  talos-applier-lambda-function git:(main) ✗ aws --profile development iam create-policy-version \
+    --policy-arn arn:aws:iam::339735964233:policy/LambdaExecutionPermissions \
+    --policy-document file://permissions-policy.json \
+    --set-as-default
+{
+    "PolicyVersion": {
+        "VersionId": "v2",
+        "IsDefaultVersion": true,
+        "CreateDate": "2024-03-07T00:45:41+00:00"
+    }
+}
+```
+
+```
+➜  talos-applier-lambda-function git:(main) ✗ GOOS=linux GOARCH=amd64 go build -o main
+
+➜  talos-applier-lambda-function git:(main) ✗ zip deployment.zip main                 
+
+  adding: main (deflated 48%)
+➜  talos-applier-lambda-function git:(main) ✗ 
+```
+
+
+```
+➜  talos-applier-lambda-function git:(main) ✗ aws --profile development lambda update-function-code --function-name SamEbsteinTalosLambdaTest --zip-file fileb://deployment.zip
+{
+    "FunctionName": "SamEbsteinTalosLambdaTest",
+    "FunctionArn": "arn:aws:lambda:us-east-1:339735964233:function:SamEbsteinTalosLambdaTest",
+    "Runtime": "go1.x",
+    "Role": "arn:aws:iam::339735964233:role/TalosLambdaExecutionRole",
+    "Handler": "main",
+    "CodeSize": 7370720,
+    "Description": "",
+    "Timeout": 15,
+    "MemorySize": 128,
+    "LastModified": "2024-03-07T00:51:40.000+0000",
+    "CodeSha256": "p4nIa48M8YisuAL0iCKMu+Nsz73A+eOQZX1cpTfG3hQ=",
+    "Version": "$LATEST",
+    "TracingConfig": {
+        "Mode": "PassThrough"
+    },
+    "RevisionId": "4ade823f-e34d-4161-b52f-ef17188bbaca",
+    "State": "Active",
+    "LastUpdateStatus": "InProgress",
+    "LastUpdateStatusReason": "The function is being created.",
+    "LastUpdateStatusReasonCode": "Creating",
+    "PackageType": "Zip",
+    "Architectures": [
+        "x86_64"
+    ],
+    "EphemeralStorage": {
+        "Size": 512
+    },
+    "SnapStart": {
+        "ApplyOn": "None",
+        "OptimizationStatus": "Off"
+    },
+    "RuntimeVersionConfig": {
+        "RuntimeVersionArn": "arn:aws:lambda:us-east-1::runtime:30052276b0b7733e82eddf1f0942de1022c7dfbc0ca93cfc121c868194868dec"
+    },
+    "LoggingConfig": {
+        "LogFormat": "Text",
+        "LogGroup": "/aws/lambda/SamEbsteinTalosLambdaTest"
+    }
+}
+
+```
+
+```
+aws --profile development lambda get-function-configuration --function-name SamEbsteinTalosLambdaTest
+
+```
+
+running into a dereferencing error, redeploying the code...
+
+didn't have public ip addresss associated with my autoscaling group..
+
+```
+➜  talos-applier-lambda-function git:(main) ✗ aws --profile development ec2 create-launch-template-version \
+    --launch-template-name talos-aws-tutorial-worker-launch-config \
+    --version-description "version with public IP" \
+    --launch-template-data '{"NetworkInterfaces":[{"DeviceIndex":0,"AssociatePublicIpAddress":true}]}'
+{
+    "LaunchTemplateVersion": {
+        "LaunchTemplateId": "lt-07671e4a96fe36737",
+        "LaunchTemplateName": "talos-aws-tutorial-worker-launch-config",
+        "VersionNumber": 2,
+        "VersionDescription": "version with public IP",
+        "CreateTime": "2024-03-07T01:20:19+00:00",
+        "CreatedBy": "arn:aws:sts::339735964233:assumed-role/admin/sam_ebstein",
+        "DefaultVersion": false,
+        "LaunchTemplateData": {
+            "NetworkInterfaces": [
+                {
+                    "AssociatePublicIpAddress": true,
+                    "DeviceIndex": 0
+                }
+            ]
+        }
+    }
+}
+```    
+
+
+```
+➜  talos-applier-lambda-function git:(main) ✗ aws --profile development ec2 modify-launch-template \
+    --launch-template-name talos-aws-tutorial-worker-launch-config \
+    --default-version 2
+{
+    "LaunchTemplate": {
+        "LaunchTemplateId": "lt-07671e4a96fe36737",
+        "LaunchTemplateName": "talos-aws-tutorial-worker-launch-config",
+        "CreateTime": "1970-01-01T00:00:00+00:00",
+        "CreatedBy": "arn:aws:sts::339735964233:assumed-role/admin/sam_ebstein",
+        "DefaultVersionNumber": 2,
+        "LatestVersionNumber": 2
+    }
+}
+```
+
+```    
+➜  talos-applier-lambda-function git:(main) ✗ aws --profile development ec2 create-launch-template-version \
+    --launch-template-name talos-aws-tutorial-worker-launch-config \
+    --version-description "version with public IP and other params" \
+    --launch-template-data "{\"ImageId\":\"$AMI\",\"InstanceType\":\"t3.small\",\"SecurityGroupIds\":[\"$SECURITY_GROUP\"],\"TagSpecifications\":[{\"ResourceType\":\"instance\",\"Tags\":[{\"Key\":\"Purpose\",\"Value\":\"talos-aws-tutorial-worker\"}]}],\"NetworkInterfaces\":[{\"DeviceIndex\":0,\"AssociatePublicIpAddress\":true}]}"
+{
+    "LaunchTemplateVersion": {
+        "LaunchTemplateId": "lt-07671e4a96fe36737",
+        "LaunchTemplateName": "talos-aws-tutorial-worker-launch-config",
+        "VersionNumber": 3,
+        "VersionDescription": "version with public IP and other params",
+        "CreateTime": "2024-03-07T01:26:39+00:00",
+        "CreatedBy": "arn:aws:sts::339735964233:assumed-role/admin/sam_ebstein",
+        "DefaultVersion": false,
+        "LaunchTemplateData": {
+            "NetworkInterfaces": [
+                {
+                    "AssociatePublicIpAddress": true,
+                    "DeviceIndex": 0
+                }
+            ],
+            "ImageId": "ami-09360283b6eec5d54",
+            "InstanceType": "t3.small",
+            "TagSpecifications": [
+                {
+                    "ResourceType": "instance",
+                    "Tags": [
+                        {
+                            "Key": "Purpose",
+                            "Value": "talos-aws-tutorial-worker"
+                        }
+                    ]
+                }
+            ],
+            "SecurityGroupIds": [
+                "sg-01e3966613a73846c"
+            ]
+        }
+    },
+    "Warning": {
+        "Errors": [
+            {
+                "Code": "InvalidParameterCombination",
+                "Message": "If you specify a network interface, you must specify all security groups as part of the network interface."
+            }
+        ]
+    }
+}
+```
+```
+➜  talos-applier-lambda-function git:(main) ✗ aws --profile development ec2 modify-launch-template \
+    --launch-template-name talos-aws-tutorial-worker-launch-config \
+    --default-version 3
+{
+    "LaunchTemplate": {
+        "LaunchTemplateId": "lt-07671e4a96fe36737",
+        "LaunchTemplateName": "talos-aws-tutorial-worker-launch-config",
+        "CreateTime": "1970-01-01T00:00:00+00:00",
+        "CreatedBy": "arn:aws:sts::339735964233:assumed-role/admin/sam_ebstein",
+        "DefaultVersionNumber": 3,
+        "LatestVersionNumber": 3
+    }
+}
+
+```    
+    
+
+I deleted the autoscaling group to setup with the launch template instead...
+
+creating new launch template version due to security group issues
+
+```
+➜  talos-applier-lambda-function git:(main) ✗ aws --profile development ec2 create-launch-template-version \
+    --launch-template-name talos-aws-tutorial-worker-launch-config \
+    --version-description "version with public IP and other params" \
+    --launch-template-data "{\"ImageId\":\"$AMI\",\"InstanceType\":\"t3.small\",\"TagSpecifications\":[{\"ResourceType\":\"instance\",\"Tags\":[{\"Key\":\"Purpose\",\"Value\":\"talos-aws-tutorial-worker\"}]}],\"NetworkInterfaces\":[{\"DeviceIndex\":0,\"AssociatePublicIpAddress\":true, \"Groups\":[\"$SECURITY_GROUP\"]}]}"
+{
+    "LaunchTemplateVersion": {
+        "LaunchTemplateId": "lt-07671e4a96fe36737",
+        "LaunchTemplateName": "talos-aws-tutorial-worker-launch-config",
+        "VersionNumber": 4,
+        "VersionDescription": "version with public IP and other params",
+        "CreateTime": "2024-03-07T01:39:57+00:00",
+        "CreatedBy": "arn:aws:sts::339735964233:assumed-role/admin/sam_ebstein",
+        "DefaultVersion": false,
+        "LaunchTemplateData": {
+            "NetworkInterfaces": [
+                {
+                    "AssociatePublicIpAddress": true,
+                    "DeviceIndex": 0,
+                    "Groups": [
+                        "sg-01e3966613a73846c"
+                    ]
+                }
+            ],
+            "ImageId": "ami-09360283b6eec5d54",
+            "InstanceType": "t3.small",
+            "TagSpecifications": [
+                {
+                    "ResourceType": "instance",
+                    "Tags": [
+                        {
+                            "Key": "Purpose",
+                            "Value": "talos-aws-tutorial-worker"
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+}
+```
+
+```
+➜  talos-applier-lambda-function git:(main) ✗ aws --profile development ec2 modify-launch-template \
+    --launch-template-name talos-aws-tutorial-worker-launch-config \
+    --default-version 4
+{
+    "LaunchTemplate": {
+        "LaunchTemplateId": "lt-07671e4a96fe36737",
+        "LaunchTemplateName": "talos-aws-tutorial-worker-launch-config",
+        "CreateTime": "1970-01-01T00:00:00+00:00",
+        "CreatedBy": "arn:aws:sts::339735964233:assumed-role/admin/sam_ebstein",
+        "DefaultVersionNumber": 4,
+        "LatestVersionNumber": 4
+    }
+}
+➜  talos-applier-lambda-function git:(main) ✗ aws --profile development autoscaling create-auto-scaling-group \
+    --auto-scaling-group-name talos-workers-asg \
+    --launch-template "LaunchTemplateName=talos-aws-tutorial-worker-launch-config,Version=4" \
+    --min-size 0 \
+    --max-size 3 \
+    --desired-capacity 1 \
+    --vpc-zone-identifier $SUBNET \
+    --tags "Key=Name,Value=talos-worker,PropagateAtLaunch=true"
+```    
+
+okay I've created a new launch template and main.go can find the public ip address.. finally..!

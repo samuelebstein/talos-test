@@ -53,6 +53,13 @@ func HandleRequest(ctx context.Context, event json.RawMessage) (MyResponse, erro
 		return MyResponse{}, fmt.Errorf("failed to unmarshal event: %v", err)
 	}
 
+	// Check if the instance state is not "running"
+	if ec2Event.Detail.State != "running" {
+		// Log and skip execution
+		fmt.Printf("Skipping execution as the instance state is '%s', not 'running'.\n", ec2Event.Detail.State)
+		return MyResponse{Message: fmt.Sprintf("Skipped execution for instance %s as its state is '%s'.", ec2Event.Detail.InstanceID, ec2Event.Detail.State)}, nil
+	}
+
 	fmt.Printf("Received EC2 state change event: Instance ID %s, State %s\n", ec2Event.Detail.InstanceID, ec2Event.Detail.State)
 
 	// Example: Retrieve the public IP address of the instance
@@ -70,25 +77,30 @@ func HandleRequest(ctx context.Context, event json.RawMessage) (MyResponse, erro
 	}
 
 	var publicIP string
+	found := false
 	for _, reservation := range describeInstancesOutput.Reservations {
 		for _, instance := range reservation.Instances {
-			publicIP = *instance.PublicIpAddress
-			break // Assuming only one instance per reservation for simplicity
+			if instance.PublicIpAddress != nil { // Add nil check here
+				publicIP = *instance.PublicIpAddress
+				found = true
+				break // Assuming only one instance per reservation for simplicity
+			}
 		}
-		if publicIP != "" {
+		if found {
 			break // Found the public IP, no need to check further
 		}
 	}
 
-	if publicIP == "" {
-		return MyResponse{}, fmt.Errorf("public IP not found for instance %s", ec2Event.Detail.InstanceID)
+	if !found {
+		msg := fmt.Sprintf("Public IP not found for instance %s. Exiting function.", ec2Event.Detail.InstanceID)
+		fmt.Println(msg)
+		return MyResponse{Message: msg}, nil
 	}
 
 	fmt.Printf("Public IP for instance %s is %s\n", ec2Event.Detail.InstanceID, publicIP)
 
 	// Proceed with applying the configuration using the public IP...
-
-	return MyResponse{Message: "Configuration process initiated"}, nil
+	return MyResponse{Message: "Configuration process can be initiated"}, nil
 }
 
 func main() {
