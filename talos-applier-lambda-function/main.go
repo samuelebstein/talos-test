@@ -59,7 +59,7 @@ func HandleRequest(ctx context.Context, event json.RawMessage) (MyResponse, erro
 
 	// Check if the instance state is not "running" because my eventbridge rule wasn't working
 	if ec2Event.Detail.State != "running" {
-		// Log and skip execution
+		// Log and skip execution. Maybe error in future as lambda shouldn't be invoked on other state changes
 		fmt.Printf("Skipping execution as the instance state is '%s', not 'running'.\n", ec2Event.Detail.State)
 		return MyResponse{Message: fmt.Sprintf("Skipped execution for instance %s as its state is '%s'.", ec2Event.Detail.InstanceID, ec2Event.Detail.State)}, nil
 	}
@@ -153,7 +153,6 @@ func HandleRequest(ctx context.Context, event json.RawMessage) (MyResponse, erro
 	}
 
 	for _, message := range resp.Messages {
-		fmt.Println("Mode details (should contain info about response): ", message.ModeDetails)
 
 		if len(resp.Messages) > 0 {
 			fmt.Println("Warnings:")
