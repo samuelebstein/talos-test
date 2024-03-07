@@ -10,6 +10,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
+	"github.com/siderolabs/talos/pkg/machinery/client"
+	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
 )
 
 // EventDetail represents the detail of the EventBridge event for EC2 state change
@@ -29,6 +32,7 @@ type MyResponse struct {
 }
 
 func getSecret(ctx context.Context, secretName string) (string, error) {
+	// TODO: should move client configuration outside of function declaration
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
 		return "", fmt.Errorf("unable to load SDK config, %v", err)
@@ -53,7 +57,7 @@ func HandleRequest(ctx context.Context, event json.RawMessage) (MyResponse, erro
 		return MyResponse{}, fmt.Errorf("failed to unmarshal event: %v", err)
 	}
 
-	// Check if the instance state is not "running"
+	// Check if the instance state is not "running" because my eventbridge rule wasn't working
 	if ec2Event.Detail.State != "running" {
 		// Log and skip execution
 		fmt.Printf("Skipping execution as the instance state is '%s', not 'running'.\n", ec2Event.Detail.State)
@@ -62,7 +66,7 @@ func HandleRequest(ctx context.Context, event json.RawMessage) (MyResponse, erro
 
 	fmt.Printf("Received EC2 state change event: Instance ID %s, State %s\n", ec2Event.Detail.InstanceID, ec2Event.Detail.State)
 
-	// Example: Retrieve the public IP address of the instance
+	// Retrieve the public IP address of the instance
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
 		return MyResponse{}, fmt.Errorf("unable to load SDK config, %v", err)
@@ -76,6 +80,7 @@ func HandleRequest(ctx context.Context, event json.RawMessage) (MyResponse, erro
 		return MyResponse{}, fmt.Errorf("failed to describe instances: %v", err)
 	}
 
+	// Should be able to simplify this found logic with the assumption that we're only querying for details of one instance
 	var publicIP string
 	found := false
 	for _, reservation := range describeInstancesOutput.Reservations {
@@ -100,7 +105,61 @@ func HandleRequest(ctx context.Context, event json.RawMessage) (MyResponse, erro
 	fmt.Printf("Public IP for instance %s is %s\n", ec2Event.Detail.InstanceID, publicIP)
 
 	// Proceed with applying the configuration using the public IP...
-	return MyResponse{Message: "Configuration process can be initiated"}, nil
+	// Retrieve the talosconfig secret for client configuration
+	talosConfigSecretName := "sam-ebstein-test-talosconfig"
+	talosConfigSecretString, err := getSecret(ctx, talosConfigSecretName)
+	if err != nil {
+		return MyResponse{}, fmt.Errorf("failed to retrieve secret %s: %v", talosConfigSecretName, err)
+	}
+
+	// Retrieve the worker config secret to apply to node
+	workerConfigSecretName := "sam-ebstein-test-talos-worker-yaml"
+	workerConfigSecretString, err := getSecret(ctx, workerConfigSecretName)
+	if err != nil {
+		return MyResponse{}, fmt.Errorf("failed to retrieve secret %s: %v", workerConfigSecretName, err)
+	}
+
+	// Establish the talos client
+	talosClientConfig, err := clientconfig.FromString(talosConfigSecretString)
+	if err != nil {
+		return MyResponse{}, fmt.Errorf("failed to create client config", err)
+	}
+
+	talosClient, err := client.New(ctx, client.WithConfig(talosClientConfig))
+	if err != nil {
+		return MyResponse{}, fmt.Errorf("failed to configure client", err)
+	}
+
+	// Closing the client after function execution. Not sure if it autocloses or issues with not closing explicitly
+	defer talosClient.Close()
+
+	// Apply the configuration to the node
+	req := &machineapi.ApplyConfigurationRequest{
+		Data:   []byte(workerConfigSecretString),
+		Mode:   machineapi.ApplyConfigurationRequest_AUTO,
+		DryRun: false,
+	}
+	resp, err := talosClient.ApplyConfiguration(ctx, req)
+	if err != nil {
+		return MyResponse{}, fmt.Errorf("failed to apply configuration to instance %s with public ip %s", ec2Event.Detail.InstanceID, publicIP, err)
+	}
+
+	for _, message := range resp.Messages {
+		fmt.Println("Mode details (should contain info about response): ", message.ModeDetails)
+
+		if len(resp.Messages) > 0 {
+			fmt.Println("Warnings:")
+			for _, warning := range message.Warnings {
+				fmt.Println("-", warning)
+			}
+			// should we error out here?
+		}
+	}
+	// How to automatically test that applying worked?
+
+	// Is running state the only configuration to check? We might need to check the status of the instance ie "ready"?
+
+	return MyResponse{Message: "Configuration process completed."}, nil
 }
 
 func main() {

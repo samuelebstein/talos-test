@@ -1378,3 +1378,5 @@ creating new launch template version due to security group issues
 ```    
 
 okay I've created a new launch template and main.go can find the public ip address.. finally..!
+
+next step is to update the function to get the secret and try to apply the config using the talos go client...!
