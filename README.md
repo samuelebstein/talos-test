@@ -1095,3 +1095,23 @@ Function succeeds now.
 ```    
 
 
+Add resource based policy to allow lambda to be invoked:
+
+```
+➜  talos-applier-lambda-function git:(main) ✗ aws --profile development lambda add-permission \
+    --function-name SamEbsteinTalosLambdaTest \
+    --statement-id EventBridgeInvokeSamEbsteinTalosLambdaTest \
+    --action lambda:InvokeFunction \
+    --principal events.amazonaws.com \
+    --source-arn arn:aws:events:us-east-1:339735964233:rule/TalosWorkersAsgScaleUp
+{
+    "Statement": "{\"Sid\":\"EventBridgeInvokeSamEbsteinTalosLambdaTest\",\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"events.amazonaws.com\"},\"Action\":\"lambda:InvokeFunction\",\"Resource\":\"arn:aws:lambda:us-east-1:339735964233:function:SamEbsteinTalosLambdaTest\",\"Condition\":{\"ArnLike\":{\"AWS:SourceArn\":\"arn:aws:events:us-east-1:339735964233:rule/TalosWorkersAsgScaleUp\"}}}"
+}
+```    
+
+
+
+
+should be able to bring in this client in the code:
+
+https://github.com/siderolabs/talos/blob/8c79539914324eee64dbdaf1f535fc4e20da55e8/pkg/machinery/client/client.go#L243
