@@ -141,7 +141,7 @@ func HandleRequest(ctx context.Context, event json.RawMessage) (MyResponse, erro
 	}
 	resp, err := talosClient.ApplyConfiguration(ctx, req)
 	if err != nil {
-		return MyResponse{}, fmt.Errorf("failed to apply configuration to instance %s with public ip %s", ec2Event.Detail.InstanceID, publicIP, err)
+		return MyResponse{}, fmt.Errorf("failed to apply configuration to instance %s with public ip %s, %v", ec2Event.Detail.InstanceID, publicIP, err)
 	}
 
 	for _, message := range resp.Messages {
