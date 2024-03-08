@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 
@@ -12,7 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
 	"github.com/siderolabs/talos/pkg/machinery/client"
-	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
+	// clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
 )
 
 // EventDetail represents the detail of the EventBridge event for EC2 state change
@@ -81,12 +82,12 @@ func HandleRequest(ctx context.Context, event json.RawMessage) (MyResponse, erro
 	}
 
 	// Should be able to simplify this found logic with the assumption that we're only querying for details of one instance
-	var publicIP string
+	var newWorkerNodeIP string
 	found := false
 	for _, reservation := range describeInstancesOutput.Reservations {
 		for _, instance := range reservation.Instances {
 			if instance.PublicIpAddress != nil { // Add nil check here
-				publicIP = *instance.PublicIpAddress
+				newWorkerNodeIP = *instance.PublicIpAddress
 				found = true
 				break // Assuming only one instance per reservation for simplicity
 			}
@@ -102,15 +103,7 @@ func HandleRequest(ctx context.Context, event json.RawMessage) (MyResponse, erro
 		return MyResponse{Message: msg}, nil
 	}
 
-	fmt.Printf("Public IP for instance %s is %s\n", ec2Event.Detail.InstanceID, publicIP)
-
-	// Proceed with applying the configuration using the public IP...
-	// Retrieve the talosconfig secret for client configuration
-	talosConfigSecretName := "sam-ebstein-test-talosconfig"
-	talosConfigSecretString, err := getSecret(ctx, talosConfigSecretName)
-	if err != nil {
-		return MyResponse{}, fmt.Errorf("failed to retrieve secret %s: %v", talosConfigSecretName, err)
-	}
+	fmt.Printf("Public IP for instance %s is %s\n", ec2Event.Detail.InstanceID, newWorkerNodeIP)
 
 	// Retrieve the worker config secret to apply to node
 	workerConfigSecretName := "sam-ebstein-test-talos-worker-yaml"
@@ -119,27 +112,26 @@ func HandleRequest(ctx context.Context, event json.RawMessage) (MyResponse, erro
 		return MyResponse{}, fmt.Errorf("failed to retrieve secret %s: %v", workerConfigSecretName, err)
 	}
 
-	// Establish the talos client configuration
-	talosClientConfig, err := clientconfig.FromString(talosConfigSecretString)
+	fmt.Printf("Retrieved secret %s", workerConfigSecretName)
+
+	// https://www.talos.dev/v1.6/introduction/getting-started/
+	// "The --insecure flag is necessary because the PKI infrastructure has not yet been made available to the node. Note: the connection will be encrypted, but not authenticated.
+	// When using the --insecure flag, it is not necessary to specify an endpoint."
+	// https://github.com/siderolabs/talos/blob/f02aeec922b6327dad6d4fee917987b147abbf2a/pkg/cluster/apply-config.go#L31-L51
+	// Apply config code above from siderolabs actually sends the endpoints as the node ip.. which seems opposite to me as usually the node is what is getting targeted.
+	talosClient, err := client.New(ctx, client.WithTLSConfig(&tls.Config{
+		InsecureSkipVerify: true,
+	}), client.WithEndpoints(newWorkerNodeIP))
 	if err != nil {
-		return MyResponse{}, fmt.Errorf("failed to create client config", err)
+		return MyResponse{}, fmt.Errorf("failed to create talos client", err)
 	}
-
-	// Target the specified node in the context. Hacky way to do this. Create function later
-	contextName := "talos-k8s-aws-tutorial"
-	configContext, exists := talosClientConfig.Contexts[contextName]
-	if !exists {
-		return MyResponse{}, fmt.Errorf("context %s does not exist", contextName)
-	}
-	configContext.Nodes = []string{publicIP}
-
-	talosClient, err := client.New(ctx, client.WithConfig(talosClientConfig))
-	if err != nil {
-		return MyResponse{}, fmt.Errorf("failed to configure client", err)
-	}
-
 	// Closing the client after function execution. Not sure if it autocloses or issues with not closing explicitly
 	defer talosClient.Close()
+	fmt.Printf("Created talos client")
+
+	// GetEndpoints returns the client's endpoints from the override set with WithEndpoints or from the configuration.
+	// I wouldn't think we need any endpoints but the client initialization checks if there's > 1 endpoints?
+	fmt.Printf("Endpoints: %v", talosClient.GetEndpoints())
 
 	// Apply the configuration to the node
 	req := &machineapi.ApplyConfigurationRequest{
@@ -147,25 +139,14 @@ func HandleRequest(ctx context.Context, event json.RawMessage) (MyResponse, erro
 		Mode:   machineapi.ApplyConfigurationRequest_AUTO,
 		DryRun: false,
 	}
-	resp, err := talosClient.ApplyConfiguration(ctx, req)
+	_, err = talosClient.ApplyConfiguration(ctx, req)
 	if err != nil {
-		return MyResponse{}, fmt.Errorf("failed to apply configuration to instance %s with public ip %s, %v", ec2Event.Detail.InstanceID, publicIP, err)
+		return MyResponse{}, fmt.Errorf("failed to apply configuration to instance %s with public ip %s, %v", ec2Event.Detail.InstanceID, newWorkerNodeIP, err)
 	}
 
-	for _, message := range resp.Messages {
-
-		if len(resp.Messages) > 0 {
-			fmt.Println("Warnings:")
-			for _, warning := range message.Warnings {
-				fmt.Println("-", warning)
-			}
-			// should we error out here?
-		}
-	}
 	// How to automatically test that applying worked?
 
 	// Is running state the only configuration to check? We might need to check the status of the instance ie "ready"?
-
 	return MyResponse{Message: "Configuration process completed."}, nil
 }
 

@@ -1955,3 +1955,98 @@ OHHHHHH THE TALOS CONFIG HAS THE ENDPOINT AND NODES IN IT so I basically brought
 
 update the talosconfig so that node is not declared...?
 took out the node value of the talosconfig. need to reupdate the secret
+
+needed an --insecure flag on the apply-configuration from local.. so need to figure out how to do that from the lambda
+
+not showing up as a worker but maybe it is
+
+```
+talosctl --talosconfig talosconfig -e 3.239.168.158 -n 3.92.18.7 apply-config -f worker.yaml --insecure
+➜  talos-applier-lambda-function git:(main) ✗ kubectl --kubeconfig=kubeconfig get nodes -o wide                 
+NAME              STATUS   ROLES           AGE    VERSION   INTERNAL-IP    EXTERNAL-IP   OS-IMAGE         KERNEL-VERSION   CONTAINER-RUNTIME
+ip-10-200-1-113   Ready    <none>          48s    v1.29.2   10.200.1.113   <none>        Talos (v1.6.4)   6.1.74-talos     containerd://1.7.13
+ip-10-200-1-211   Ready    control-plane   149m   v1.29.2   10.200.1.211   <none>        Talos (v1.6.4)   6.1.74-talos     containerd://1.7.13
+ip-10-200-1-22    Ready    control-plane   150m   v1.29.2   10.200.1.22    <none>        Talos (v1.6.4)   6.1.74-talos     containerd://1.7.13
+ip-10-200-1-252   Ready    control-plane   150m   v1.29.2   10.200.1.252   <none>        Talos (v1.6.4)   6.1.74-talos     containerd://1.7.13
+```
+
+
+This worked locally:
+
+```
+➜  talos-applier-lambda-function git:(main) ✗ talosctl --talosconfig talosconfig -e 3.239.168.158 -n 3.92.18.7 apply-config -f worker.yaml --insecure        
+
+➜  talos-applier-lambda-function git:(main) ✗ talosctl --talosconfig talosconfig service                                                             
+NODE            SERVICE      STATE     HEALTH   LAST CHANGE   LAST EVENT
+3.239.168.158   apid         Running   OK       31m48s ago    Health check successful
+3.239.168.158   containerd   Running   OK       31m56s ago    Health check successful
+3.239.168.158   cri          Running   OK       31m53s ago    Health check successful
+3.239.168.158   dashboard    Running   ?        31m54s ago    Process Process(["/sbin/dashboard"]) started with PID 1321
+3.239.168.158   etcd         Running   OK       31m48s ago    Health check successful
+3.239.168.158   kubelet      Running   OK       31m51s ago    Health check successful
+3.239.168.158   machined     Running   OK       32m2s ago     Health check successful
+3.239.168.158   trustd       Running   OK       31m48s ago    Health check successful
+3.239.168.158   udevd        Running   OK       32m1s ago     Health check successful
+➜  talos-applier-lambda-function git:(main) ✗ talosctl --talosconfig talosconfig service -n 3.92.18.7 
+NODE        SERVICE      STATE     HEALTH   LAST CHANGE   LAST EVENT
+3.92.18.7   apid         Running   OK       23m13s ago    Health check successful
+3.92.18.7   containerd   Running   OK       41m38s ago    Health check successful
+3.92.18.7   cri          Running   OK       23m18s ago    Health check successful
+3.92.18.7   dashboard    Running   ?        41m37s ago    Process Process(["/sbin/dashboard"]) started with PID 1304
+3.92.18.7   kubelet      Running   OK       23m7s ago     Health check successful
+3.92.18.7   machined     Running   OK       41m43s ago    Health check successful
+3.92.18.7   udevd        Running   OK       41m42s ago    Health check successful
+```
+
+so I know its possible
+
+```
+
+➜  talos-applier-lambda-function git:(main) ✗ talosctl --talosconfig talosconfig health                                          
+discovered nodes: ["10.200.1.211" "10.200.1.22" "10.200.1.252" "10.200.1.113"]
+waiting for etcd to be healthy: ...
+waiting for etcd to be healthy: OK
+waiting for etcd members to be consistent across nodes: ...
+waiting for etcd members to be consistent across nodes: OK
+waiting for etcd members to be control plane nodes: ...
+waiting for etcd members to be control plane nodes: OK
+waiting for apid to be ready: ...
+waiting for apid to be ready: OK
+waiting for all nodes memory sizes: ...
+waiting for all nodes memory sizes: OK
+waiting for all nodes disk sizes: ...
+waiting for all nodes disk sizes: OK
+waiting for kubelet to be healthy: ...
+waiting for kubelet to be healthy: OK
+waiting for all nodes to finish boot sequence: ...
+waiting for all nodes to finish boot sequence: OK
+waiting for all k8s nodes to report: ...
+waiting for all k8s nodes to report: OK
+waiting for all k8s nodes to report ready: ...
+waiting for all k8s nodes to report ready: OK
+waiting for all control plane static pods to be running: ...
+waiting for all control plane static pods to be running: OK
+waiting for all control plane components to be ready: ...
+waiting for all control plane components to be ready: OK
+waiting for kube-proxy to report ready: ...
+waiting for kube-proxy to report ready: OK
+waiting for coredns to report ready: ...
+waiting for coredns to report ready: OK
+waiting for all k8s nodes to report schedulable: ...
+waiting for all k8s nodes to report schedulable: OK
+
+```
+
+I used this command to reconfigure the instnace that I messed up:
+```
+➜  talos-applier-lambda-function git:(main) ✗ talosctl --talosconfig talosconfig -n 3.239.168.158 apply-config -f controlplane.yaml 
+```
+
+
+pkg.cluster.apply-config.go has really helpful info from the repo that sean sent me..
+
+Latest changes create a talos config with tls verification skipped. also no longer getting the talos config, only the worker configuration to apply. and setting the endpoint as the new worker node ip instead of as the node target. following apply-config logic from talos repo: https://github.com/siderolabs/talos/blob/f02aeec922b6327dad6d4fee917987b147abbf2a/pkg/cluster/apply-config.go#L31-L51
+
+
+How to test before deploying...
+
