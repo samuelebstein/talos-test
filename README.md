@@ -2050,3 +2050,137 @@ Latest changes create a talos config with tls verification skipped. also no long
 
 How to test before deploying...
 
+```
+➜  talos-applier-lambda-function git:(main) ✗ kubectl --kubeconfig=kubeconfig get nodes -o wide
+NAME              STATUS   ROLES           AGE   VERSION   INTERNAL-IP    EXTERNAL-IP   OS-IMAGE         KERNEL-VERSION   CONTAINER-RUNTIME
+ip-10-200-1-211   Ready    control-plane   25h   v1.29.2   10.200.1.211   <none>        Talos (v1.6.4)   6.1.74-talos     containerd://1.7.13
+ip-10-200-1-22    Ready    control-plane   25h   v1.29.2   10.200.1.22    <none>        Talos (v1.6.4)   6.1.74-talos     containerd://1.7.13
+ip-10-200-1-252   Ready    control-plane   25h   v1.29.2   10.200.1.252   <none>        Talos (v1.6.4)   6.1.74-talos     containerd://1.7.13
+
+➜  talos-applier-lambda-function git:(main) ✗ talosctl --talosconfig talosconfig service -e 3.239.168.158 -n 3.239.168.158
+NODE            SERVICE      STATE     HEALTH   LAST CHANGE     LAST EVENT
+3.239.168.158   apid         Running   OK       21h44m9s ago    Health check successful
+3.239.168.158   containerd   Running   OK       21h44m16s ago   Health check successful
+3.239.168.158   cri          Running   OK       21h44m13s ago   Health check successful
+3.239.168.158   dashboard    Running   ?        21h44m15s ago   Process Process(["/sbin/dashboard"]) started with PID 1320
+3.239.168.158   etcd         Running   OK       21h44m8s ago    Health check successful
+3.239.168.158   kubelet      Running   OK       21h44m6s ago    Health check successful
+3.239.168.158   machined     Running   OK       21h44m22s ago   Health check successful
+3.239.168.158   trustd       Running   OK       21h44m8s ago    Health check successful
+3.239.168.158   udevd        Running   OK       21h44m20s ago   Health check successful
+➜  talos-applier-lambda-function git:(main) ✗ 
+
+➜  talos-applier-lambda-function git:(main) ✗ talosctl --talosconfig talosconfig service -e 3.239.168.158 -n 10.200.1.211             
+NODE           SERVICE      STATE     HEALTH   LAST CHANGE     LAST EVENT
+10.200.1.211   apid         Running   OK       21h44m43s ago   Health check successful
+10.200.1.211   containerd   Running   OK       21h44m50s ago   Health check successful
+10.200.1.211   cri          Running   OK       21h44m47s ago   Health check successful
+10.200.1.211   dashboard    Running   ?        21h44m49s ago   Process Process(["/sbin/dashboard"]) started with PID 1320
+10.200.1.211   etcd         Running   OK       21h44m42s ago   Health check successful
+10.200.1.211   kubelet      Running   OK       21h44m40s ago   Health check successful
+10.200.1.211   machined     Running   OK       21h44m56s ago   Health check successful
+10.200.1.211   trustd       Running   OK       21h44m42s ago   Health check successful
+10.200.1.211   udevd        Running   OK       21h44m54s ago   Health check successful
+
+➜  talos-applier-lambda-function git:(main) ✗ talosctl --talosconfig talosconfig health -e 3.239.168.158 -n 3.239.168.158  
+discovered nodes: ["10.200.1.211" "10.200.1.22" "10.200.1.252"]
+waiting for etcd to be healthy: ...
+waiting for etcd to be healthy: OK
+waiting for etcd members to be consistent across nodes: ...
+waiting for etcd members to be consistent across nodes: OK
+waiting for etcd members to be control plane nodes: ...
+waiting for etcd members to be control plane nodes: OK
+waiting for apid to be ready: ...
+waiting for apid to be ready: OK
+waiting for all nodes memory sizes: ...
+waiting for all nodes memory sizes: OK
+waiting for all nodes disk sizes: ...
+waiting for all nodes disk sizes: OK
+waiting for kubelet to be healthy: ...
+waiting for kubelet to be healthy: OK
+waiting for all nodes to finish boot sequence: ...
+waiting for all nodes to finish boot sequence: OK
+waiting for all k8s nodes to report: ...
+waiting for all k8s nodes to report: OK
+waiting for all k8s nodes to report ready: ...
+waiting for all k8s nodes to report ready: OK
+waiting for all control plane static pods to be running: ...
+waiting for all control plane static pods to be running: OK
+waiting for all control plane components to be ready: ...
+waiting for all control plane components to be ready: OK
+waiting for kube-proxy to report ready: ...
+waiting for kube-proxy to report ready: OK
+waiting for coredns to report ready: ...
+waiting for coredns to report ready: OK
+waiting for all k8s nodes to report schedulable: ...
+waiting for all k8s nodes to report schedulable: OK
+
+```
+
+
+testing after 
+
+```
+doesn't say its a worker node..not sure if it should?
+➜  talos-applier-lambda-function git:(main) ✗ kubectl --kubeconfig=kubeconfig get nodes -o wide
+NAME              STATUS   ROLES           AGE    VERSION   INTERNAL-IP    EXTERNAL-IP   OS-IMAGE         KERNEL-VERSION   CONTAINER-RUNTIME
+ip-10-200-1-177   Ready    <none>          4m3s   v1.29.2   10.200.1.177   <none>        Talos (v1.6.4)   6.1.74-talos     containerd://1.7.13
+ip-10-200-1-211   Ready    control-plane   26h    v1.29.2   10.200.1.211   <none>        Talos (v1.6.4)   6.1.74-talos     containerd://1.7.13
+ip-10-200-1-22    Ready    control-plane   26h    v1.29.2   10.200.1.22    <none>        Talos (v1.6.4)   6.1.74-talos     containerd://1.7.13
+ip-10-200-1-252   Ready    control-plane   26h    v1.29.2   10.200.1.252   <none>        Talos (v1.6.4)   6.1.74-talos     containerd://1.7.13
+
+➜  talos-applier-lambda-function git:(main) ✗ talosctl --talosconfig talosconfig service -e 3.239.168.158 -n 10.200.1.211
+NODE           SERVICE      STATE     HEALTH   LAST CHANGE     LAST EVENT
+10.200.1.211   apid         Running   OK       21h58m29s ago   Health check successful
+10.200.1.211   containerd   Running   OK       21h58m36s ago   Health check successful
+10.200.1.211   cri          Running   OK       21h58m33s ago   Health check successful
+10.200.1.211   dashboard    Running   ?        21h58m35s ago   Process Process(["/sbin/dashboard"]) started with PID 1320
+10.200.1.211   etcd         Running   OK       21h58m28s ago   Health check successful
+10.200.1.211   kubelet      Running   OK       21h58m26s ago   Health check successful
+10.200.1.211   machined     Running   OK       21h58m42s ago   Health check successful
+10.200.1.211   trustd       Running   OK       21h58m28s ago   Health check successful
+10.200.1.211   udevd        Running   OK       21h58m40s ago   Health check successful
+➜  talos-applier-lambda-function git:(main) ✗ talosctl --talosconfig talosconfig service -e 3.239.168.158 -n 10.200.1.177            
+NODE           SERVICE      STATE     HEALTH   LAST CHANGE   LAST EVENT
+10.200.1.177   apid         Running   OK       5m34s ago     Health check successful
+10.200.1.177   containerd   Running   OK       6m27s ago     Health check successful
+10.200.1.177   cri          Running   OK       5m39s ago     Health check successful
+10.200.1.177   dashboard    Running   ?        6m26s ago     Process Process(["/sbin/dashboard"]) started with PID 1307
+10.200.1.177   kubelet      Running   OK       5m28s ago     Health check successful
+10.200.1.177   machined     Running   OK       6m33s ago     Health check successful
+10.200.1.177   udevd        Running   OK       6m32s ago     Health check successful
+
+➜  talos-applier-lambda-function git:(main) ✗ talosctl --talosconfig talosconfig health -e 3.239.168.158 -n 3.239.168.158 
+discovered nodes: ["10.200.1.177" "10.200.1.211" "10.200.1.22" "10.200.1.252"]
+waiting for etcd to be healthy: ...
+waiting for etcd to be healthy: OK
+waiting for etcd members to be consistent across nodes: ...
+waiting for etcd members to be consistent across nodes: OK
+waiting for etcd members to be control plane nodes: ...
+waiting for etcd members to be control plane nodes: OK
+waiting for apid to be ready: ...
+waiting for apid to be ready: OK
+waiting for all nodes memory sizes: ...
+waiting for all nodes memory sizes: OK
+waiting for all nodes disk sizes: ...
+waiting for all nodes disk sizes: OK
+waiting for kubelet to be healthy: ...
+waiting for kubelet to be healthy: OK
+waiting for all nodes to finish boot sequence: ...
+waiting for all nodes to finish boot sequence: OK
+waiting for all k8s nodes to report: ...
+waiting for all k8s nodes to report: OK
+waiting for all k8s nodes to report ready: ...
+waiting for all k8s nodes to report ready: OK
+waiting for all control plane static pods to be running: ...
+waiting for all control plane static pods to be running: OK
+waiting for all control plane components to be ready: ...
+waiting for all control plane components to be ready: OK
+waiting for kube-proxy to report ready: ...
+waiting for kube-proxy to report ready: OK
+waiting for coredns to report ready: ...
+waiting for coredns to report ready: OK
+waiting for all k8s nodes to report schedulable: ...
+waiting for all k8s nodes to report schedulable: OK
+➜  talos-applier-lambda-function git:(main) ✗ 
+```

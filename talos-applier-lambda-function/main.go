@@ -133,6 +133,8 @@ func HandleRequest(ctx context.Context, event json.RawMessage) (MyResponse, erro
 	// I wouldn't think we need any endpoints but the client initialization checks if there's > 1 endpoints?
 	fmt.Printf("Endpoints: %v", talosClient.GetEndpoints())
 
+	// TODO: there should be a check on the instance being succesfully initialized/"healthy" before running apply configuration. Or have retries enabled. Because lambda failed but then retried due to default lambda retries
+
 	// Apply the configuration to the node
 	req := &machineapi.ApplyConfigurationRequest{
 		Data:   []byte(workerConfigSecretString),
