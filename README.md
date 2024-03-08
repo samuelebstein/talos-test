@@ -2184,3 +2184,13 @@ waiting for all k8s nodes to report schedulable: ...
 waiting for all k8s nodes to report schedulable: OK
 ➜  talos-applier-lambda-function git:(main) ✗ 
 ```
+
+Tearing it all down:
+- secrets done
+- security group done
+- load balancer / listener done
+- launch template done
+- target group done
+- control plane nodes done
+- asg / worker nodes done
+- event bridge rule / trigger done
